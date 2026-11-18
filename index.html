@@ -191,6 +191,7 @@ footer .pix{font-size:10px;line-height:1.8;color:var(--gold);margin:0 0 6px}
         <p class="cap" style="margin-top:10px">Got it, will dabao @ AMK HUB 🥡</p>
       </div>
       <p class="big wallh" id="wallh" hidden>Santa’s wall 🎅</p>
+      <p class="fine2" id="wstat" hidden></p>
       <div class="wall" id="wall"></div>
       <div class="pane endmsg" id="end" hidden>
         <p class="big">See you there!</p>
@@ -546,9 +547,9 @@ $('confirm').addEventListener('click',e=>{
   [[9,20],[29,20]].forEach(([x,y])=>{r(x-1,y-1,8,8,'#fff');r(x,y,6,6,'#ffd34e');r(x+2,y,1,6,'#fff');r(x,y+2,6,1,'#fff');});
   [3,39].forEach(x=>{for(let y=17;y<32;y+=2)r(x,y,2,2,(y/2|0)%2?'#fff':'#d63a3a');r(x+(x<20?1:-1),15,2,2,'#d63a3a');});
 
-  let sentOk=false,uid=null,dbm=null,isOwner=false,editing=false,local=null,notes=[];
+  let sentOk=false,uid=null,dbm=null,isOwner=false,editing=false,local=null,notes=[],dbErr='';
   const wall=$('wall'),form=$('nform'),COLS=['#ffe97a','#ffb8d4','#b8f0c8','#b8dcff'];
-  const refresh=()=>{const on=$('opt-order').getAttribute('aria-pressed')==='true';$('wall').hidden=!on;$('wallh').hidden=!(on&&notes.length);$('end').hidden=!($('opt-dabao').getAttribute('aria-pressed')==='true'||sentOk)};
+  const refresh=()=>{const on=$('opt-order').getAttribute('aria-pressed')==='true';$('wall').hidden=!on;$('wallh').hidden=!on;const st=dbErr?('Couldn’t reach the shared wall ('+dbErr+'). Only you can see your own note for now.'):(!dbm?'Connecting to the wall...':(notes.length?'':'No notes yet. Be the first to leave one!'));$('wstat').textContent=st;$('wstat').hidden=!on||!st;$('end').hidden=!($('opt-dabao').getAttribute('aria-pressed')==='true'||sentOk)};
   const go=k=>{['order','dabao'].forEach(x=>{$('opt-'+x).setAttribute('aria-pressed',String(x===k));$('pane-'+x).hidden=x!==k});refresh();
     setTimeout(()=>($('end').hidden?$('pane-'+k):$('end')).scrollIntoView({behavior:reduce?'auto':'smooth',block:'nearest'}),60)};
   $('opt-order').addEventListener('click',()=>go('order'));
@@ -606,7 +607,7 @@ $('confirm').addEventListener('click',e=>{
     }catch(e){
       local=Object.assign({id:'me',mine:true},body);editing=false;
       setNotes(notes.filter(n=>!n.mine).concat([local]));
-      $('err').hidden=false;$('err').textContent='Heads up: this note is only visible on your device right now.';
+      $('err').hidden=false;$('err').textContent='Heads up: your note was NOT shared ('+((e&&(e.code||e.message))||'no connection')+'). Only you can see it on this device.';
     }
     $('send').disabled=false;
     setTimeout(()=>$('end').scrollIntoView({behavior:reduce?'auto':'smooth',block:'nearest'}),80);
@@ -615,7 +616,7 @@ $('confirm').addEventListener('click',e=>{
   (async()=>{
     try{
       const cfg=window.TMX_FIREBASE;
-      if(!cfg||!cfg.apiKey||/^PASTE/.test(cfg.apiKey))return;
+      if(!cfg||!cfg.apiKey||/^PASTE/.test(cfg.apiKey)){dbErr='not set up';refresh();return}
       const V='https://www.gstatic.com/firebasejs/10.14.1/';
       const [A,Au,Fs]=await Promise.all([import(V+'firebase-app.js'),import(V+'firebase-auth.js'),import(V+'firebase-firestore.js')]);
       const app=A.initializeApp(cfg),auth=Au.getAuth(app),fs=Fs.getFirestore(app);
@@ -627,11 +628,11 @@ $('confirm').addEventListener('click',e=>{
           q=>cb({docs:q.docs.map(x=>({id:x.id,data:()=>x.data()}))}),eb)})})
       };
       isOwner=false;
-      dbm.collection('notes').orderBy().onSnapshot(snap=>{
+      dbm.collection('notes').orderBy().onSnapshot(snap=>{dbErr='';
         local=null;
         setNotes(snap.docs.map(x=>Object.assign({id:x.id,mine:x.id===uid},x.data())));
-      },()=>{});
-    }catch(e){dbm=null;uid=null}
+      },e=>{dbErr=(e&&e.code)||'error';refresh()});
+    }catch(e){dbm=null;uid=null;dbErr=(e&&(e.code||e.message))||'error';refresh()}
   })();
 })();
 
